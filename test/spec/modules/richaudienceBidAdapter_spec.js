@@ -804,6 +804,31 @@ describe('Richaudience adapter tests', function () {
     });
   });
 
+  describe('us privacy test', function () {
+    it('Verify build request with US Privacy', function () {
+      const request = spec.buildRequests(DEFAULT_PARAMS_WO_OPTIONAL, {
+        uspConsent: '1YNN',
+        refererInfo: {
+          page: 'https://domain.com',
+          numIframes: 0
+        }
+      });
+      const requestContent = JSON.parse(request[0].data);
+      expect(requestContent.regs.us_privacy).to.equal('1YNN');
+    });
+
+    it('does not send us_privacy when there is no USP consent', function () {
+      const request = spec.buildRequests(DEFAULT_PARAMS_WO_OPTIONAL, {
+        refererInfo: {
+          page: 'https://domain.com',
+          numIframes: 0
+        }
+      });
+      const requestContent = JSON.parse(request[0].data);
+      expect(requestContent).to.not.have.property('regs');
+    });
+  });
+
   describe('page visibility test', function () {
     function setPageHidden(hidden) {
       Object.defineProperty(document, 'hidden', { value: hidden, configurable: true });
@@ -1337,6 +1362,7 @@ describe('Richaudience adapter tests', function () {
     });
     afterEach(function () {
       sandbox.restore();
+      config.resetConfig();
     });
     it('Verifies user syncs iframe include', function () {
       config.setConfig({
@@ -1754,6 +1780,28 @@ describe('Richaudience adapter tests', function () {
       });
       refererStub.restore();
       expect(syncs).to.have.lengthOf(0);
+    });
+
+    it('Verifies user syncs iframe include with US Privacy', function () {
+      config.setConfig({
+        'userSync': { filterSettings: { iframe: { bidders: '*', filter: 'include' } } }
+      });
+
+      const syncs = spec.getUserSyncs({ iframeEnabled: true }, [BID_RESPONSE], undefined, '1YNN');
+      expect(syncs).to.have.lengthOf(1);
+      expect(syncs[0].type).to.equal('iframe');
+      expect(syncs[0].url).to.contain('us_privacy=1YNN');
+    });
+
+    it('Verifies user syncs image include with US Privacy', function () {
+      config.setConfig({
+        'userSync': { filterSettings: { image: { bidders: '*', filter: 'include' } } }
+      });
+
+      const syncs = spec.getUserSyncs({ pixelEnabled: true }, [BID_RESPONSE], undefined, '1YNN');
+      expect(syncs).to.have.lengthOf(1);
+      expect(syncs[0].type).to.equal('image');
+      expect(syncs[0].url).to.contain('us_privacy=1YNN');
     });
   });
 });

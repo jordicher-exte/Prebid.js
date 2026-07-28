@@ -1,4 +1,4 @@
-import { deepAccess, isFn, logWarn, triggerPixel } from '../src/utils.js';
+import { deepAccess, deepSetValue, isEmpty, isFn, logWarn, triggerPixel } from '../src/utils.js';
 import { registerBidder } from '../src/adapters/bidderFactory.js';
 import { config } from '../src/config.js';
 import { BANNER, VIDEO } from '../src/mediaTypes.js';
@@ -56,7 +56,8 @@ export const spec = {
         userData: deepAccess(bid, 'ortb2.user.data'),
         displaymanager: bid.ortb2Imp?.displaymanager || 'Prebid.js',
         displaymanagerver: bid.ortb2Imp?.displaymanagerver || '$prebid.version$',
-        ext: { prebid: { channel: { name: 'pbjs', version: '$prebid.version$' } } }
+        ext: { prebid: { channel: { name: 'pbjs', version: '$prebid.version$' } } },
+        regs: raiGetRegs(bidderRequest)
       };
 
       payload.gdpr_consent = '';
@@ -166,6 +167,7 @@ export const spec = {
     var rand = Math.floor(Math.random() * 9999999999);
     var consent = '';
     var consentGPP = '';
+    var consentUSP = '';
 
     const raiSync = raiGetSyncInclude(config);
 
@@ -179,33 +181,27 @@ export const spec = {
       consentGPP += '&gpp_sid=' + encodeURIComponent(gppConsent?.applicableSections?.join(','));
     }
 
+    // US Privacy (CCPA)
+    if (uspConsent) {
+      consentUSP = 'us_privacy=' + encodeURIComponent(uspConsent);
+    }
+
+    const consentParams = [consent, consentGPP, consentUSP].filter(param => param !== '');
+    const withConsent = (syncUrl) => consentParams.length ? `${syncUrl}&${consentParams.join('&')}` : syncUrl;
+
     if (syncOptions.iframeEnabled && raiSync.raiIframe !== 'exclude') {
-      let syncUrl = 'https://sync.richaudience.com/dcf3528a0b8aa83634892d50e91c306e/?ord=' + rand;
-      if (consent !== '') {
-        syncUrl += `&${consent}`;
-      }
-      if (consentGPP !== '') {
-        syncUrl += `&${consentGPP}`;
-      }
       syncs.push({
         type: 'iframe',
-        url: syncUrl
+        url: withConsent('https://sync.richaudience.com/dcf3528a0b8aa83634892d50e91c306e/?ord=' + rand)
       });
     }
 
     const referer = raiGetReferer(getRefererInfo());
 
     if (syncOptions.pixelEnabled && referer != null && syncs.length === 0 && raiSync.raiImage !== 'exclude') {
-      let syncUrl = `https://sync.richaudience.com/bf7c142f4339da0278e83698a02b0854/?referrer=${referer}`;
-      if (consent !== '') {
-        syncUrl += `&${consent}`;
-      }
-      if (consentGPP !== '') {
-        syncUrl += `&${consentGPP}`;
-      }
       syncs.push({
         type: 'image',
-        url: syncUrl
+        url: withConsent(`https://sync.richaudience.com/bf7c142f4339da0278e83698a02b0854/?referrer=${referer}`)
       });
     }
     return syncs;
@@ -353,4 +349,14 @@ function raiGetTimeoutURL(data) {
 function setDSA(bid) {
   const dsa = bid?.ortb2?.regs?.ext?.dsa ? bid?.ortb2?.regs?.ext?.dsa : null;
   return dsa;
+}
+
+function raiGetRegs(bidderRequest) {
+  const regs = {};
+
+  if (bidderRequest?.uspConsent) {
+    deepSetValue(regs, 'us_privacy', bidderRequest.uspConsent);
+  }
+
+  return isEmpty(regs) ? undefined : regs;
 }

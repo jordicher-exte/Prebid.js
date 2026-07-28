@@ -159,15 +159,19 @@ export const spec = {
    * @param {syncOptions} Publisher prebid configuration
    * @param {serverResponses} Response from the server
    * @param {gdprConsent} GDPR consent object
+   * @param {string} uspConsent US Privacy consent string
+   * @param {Object} gppConsent GPP consent object
+   * @param {boolean} coppa COPPA flag resolved by the core
    * @returns {Array}
    */
-  getUserSyncs: function (syncOptions, responses, gdprConsent, uspConsent, gppConsent) {
+  getUserSyncs: function (syncOptions, responses, gdprConsent, uspConsent, gppConsent, coppa) {
     const syncs = [];
 
     var rand = Math.floor(Math.random() * 9999999999);
     var consent = '';
     var consentGPP = '';
     var consentUSP = '';
+    var consentCOPPA = '';
 
     const raiSync = raiGetSyncInclude(config);
 
@@ -186,7 +190,11 @@ export const spec = {
       consentUSP = 'us_privacy=' + encodeURIComponent(uspConsent);
     }
 
-    const consentParams = [consent, consentGPP, consentUSP].filter(param => param !== '');
+    if (coppa) {
+      consentCOPPA = 'coppa=1';
+    }
+
+    const consentParams = [consent, consentGPP, consentUSP, consentCOPPA].filter(param => param !== '');
     const withConsent = (syncUrl) => consentParams.length ? `${syncUrl}&${consentParams.join('&')}` : syncUrl;
 
     if (syncOptions.iframeEnabled && raiSync.raiIframe !== 'exclude') {
@@ -356,6 +364,10 @@ function raiGetRegs(bidderRequest) {
 
   if (bidderRequest?.uspConsent) {
     deepSetValue(regs, 'us_privacy', bidderRequest.uspConsent);
+  }
+
+  if (bidderRequest?.ortb2?.regs?.coppa === 1) {
+    deepSetValue(regs, 'coppa', 1);
   }
 
   return isEmpty(regs) ? undefined : regs;

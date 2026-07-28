@@ -829,6 +829,64 @@ describe('Richaudience adapter tests', function () {
     });
   });
 
+  describe('coppa test', function () {
+    const REFERER_INFO = { page: 'https://domain.com', numIframes: 0 };
+
+    afterEach(function () {
+      config.resetConfig();
+    });
+
+    it('sends regs.coppa when the request carries the COPPA flag', function () {
+      const request = spec.buildRequests(DEFAULT_PARAMS_WO_OPTIONAL, {
+        refererInfo: REFERER_INFO,
+        ortb2: { regs: { coppa: 1 } }
+      });
+      const requestContent = JSON.parse(request[0].data);
+      expect(requestContent.regs).to.deep.equal({ coppa: 1 });
+    });
+
+    it('does not send regs when the request clears the COPPA flag', function () {
+      const request = spec.buildRequests(DEFAULT_PARAMS_WO_OPTIONAL, {
+        refererInfo: REFERER_INFO,
+        ortb2: { regs: { coppa: 0 } }
+      });
+      const requestContent = JSON.parse(request[0].data);
+      expect(requestContent).to.not.have.property('regs');
+    });
+
+    it('does not send regs when the request says nothing about COPPA', function () {
+      const request = spec.buildRequests(DEFAULT_PARAMS_WO_OPTIONAL, {
+        refererInfo: REFERER_INFO
+      });
+      const requestContent = JSON.parse(request[0].data);
+      expect(requestContent).to.not.have.property('regs');
+    });
+
+    it('carries COPPA and US Privacy together under regs without clobbering', function () {
+      const request = spec.buildRequests(DEFAULT_PARAMS_WO_OPTIONAL, {
+        refererInfo: REFERER_INFO,
+        uspConsent: '1YNN',
+        ortb2: { regs: { coppa: 1 } }
+      });
+      const requestContent = JSON.parse(request[0].data);
+      expect(requestContent.regs).to.deep.equal({ coppa: 1, us_privacy: '1YNN' });
+    });
+
+    it('passes COPPA to the sync endpoint instead of suppressing the sync', function () {
+      config.setConfig({
+        'userSync': { filterSettings: { iframe: { bidders: '*', filter: 'include' } } }
+      });
+      const syncOptions = { iframeEnabled: true };
+
+      const withCoppa = spec.getUserSyncs(syncOptions, [BID_RESPONSE], null, null, null, true);
+      expect(withCoppa).to.have.lengthOf(1);
+      expect(withCoppa[0].url).to.contain('&coppa=1');
+
+      const withoutCoppa = spec.getUserSyncs(syncOptions, [BID_RESPONSE], null, null, null, false);
+      expect(withoutCoppa[0].url).to.not.contain('coppa=');
+    });
+  });
+
   describe('page visibility test', function () {
     function setPageHidden(hidden) {
       Object.defineProperty(document, 'hidden', { value: hidden, configurable: true });

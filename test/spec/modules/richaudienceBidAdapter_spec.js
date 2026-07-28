@@ -1861,5 +1861,40 @@ describe('Richaudience adapter tests', function () {
       expect(syncs[0].type).to.equal('image');
       expect(syncs[0].url).to.contain('us_privacy=1YNN');
     });
+
+    it('syncs even without Purpose 1 consent and tells the endpoint that GDPR applies', function () {
+      config.setConfig({
+        'userSync': { filterSettings: { iframe: { bidders: '*', filter: 'include' } } }
+      });
+
+      const syncs = spec.getUserSyncs({ iframeEnabled: true }, [BID_RESPONSE], {
+        consentString: 'CONSENT',
+        gdprApplies: true,
+        vendorData: { purpose: { consents: { 1: false } } }
+      });
+      expect(syncs).to.have.lengthOf(1);
+      expect(syncs[0].url).to.contain('&gdpr=1&consentString=CONSENT');
+    });
+
+    it('tells the sync endpoint when GDPR does not apply', function () {
+      config.setConfig({
+        'userSync': { filterSettings: { iframe: { bidders: '*', filter: 'include' } } }
+      });
+
+      const syncs = spec.getUserSyncs({ iframeEnabled: true }, [BID_RESPONSE], { gdprApplies: false });
+      expect(syncs[0].url).to.contain('&gdpr=0');
+    });
+
+    it('leaves the gdpr flag out of the sync URL when it is unknown', function () {
+      config.setConfig({
+        'userSync': { filterSettings: { iframe: { bidders: '*', filter: 'include' } } }
+      });
+
+      const noCmp = spec.getUserSyncs({ iframeEnabled: true }, [BID_RESPONSE], null);
+      const noApplies = spec.getUserSyncs({ iframeEnabled: true }, [BID_RESPONSE], { consentString: 'CONSENT' });
+      expect(noCmp[0].url).to.not.contain('gdpr=');
+      expect(noApplies[0].url).to.not.contain('gdpr=');
+      expect(noApplies[0].url).to.contain('consentString=CONSENT');
+    });
   });
 });

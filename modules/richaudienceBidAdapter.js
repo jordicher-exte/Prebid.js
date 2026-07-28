@@ -168,12 +168,17 @@ export const spec = {
     const syncs = [];
 
     var rand = Math.floor(Math.random() * 9999999999);
+    var consentGDPR = '';
     var consent = '';
     var consentGPP = '';
     var consentUSP = '';
     var consentCOPPA = '';
 
     const raiSync = raiGetSyncInclude(config);
+
+    if (typeof gdprConsent?.gdprApplies === 'boolean') {
+      consentGDPR = 'gdpr=' + (gdprConsent.gdprApplies ? 1 : 0);
+    }
 
     if (gdprConsent && typeof gdprConsent.consentString === 'string' && typeof gdprConsent.consentString !== 'undefined') {
       consent = `consentString=${gdprConsent.consentString}`;
@@ -194,7 +199,7 @@ export const spec = {
       consentCOPPA = 'coppa=1';
     }
 
-    const consentParams = [consent, consentGPP, consentUSP, consentCOPPA].filter(param => param !== '');
+    const consentParams = [consentGDPR, consent, consentGPP, consentUSP, consentCOPPA].filter(param => param !== '');
     const withConsent = (syncUrl) => consentParams.length ? `${syncUrl}&${consentParams.join('&')}` : syncUrl;
 
     if (syncOptions.iframeEnabled && raiSync.raiIframe !== 'exclude') {

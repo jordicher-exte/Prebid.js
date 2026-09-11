@@ -52,37 +52,13 @@ export const spec = {
         kws: bid.params.keywords,
         schain: bid?.ortb2?.source?.ext?.schain,
         gpid: raiSetPbAdSlot(bid),
-        dsa: setDSA(bid),
         userData: deepAccess(bid, 'ortb2.user.data'),
         displaymanager: bid.ortb2Imp?.displaymanager || 'Prebid.js',
         displaymanagerver: bid.ortb2Imp?.displaymanagerver || '$prebid.version$',
         ext: { prebid: { channel: { name: 'pbjs', version: '$prebid.version$' } } },
-        regs: raiGetRegs(bidderRequest)
+        regs: raiGetRegs(bidderRequest),
+        user: raiGetUser(bidderRequest)
       };
-
-      payload.gdpr_consent = '';
-      payload.gdpr = false;
-
-      if (bidderRequest && bidderRequest.gdprConsent) {
-        if (typeof bidderRequest.gdprConsent.gdprApplies !== 'undefined') {
-          payload.gdpr = bidderRequest.gdprConsent.gdprApplies;
-        }
-        if (typeof bidderRequest.gdprConsent.consentString !== 'undefined') {
-          payload.gdpr_consent = bidderRequest.gdprConsent.consentString;
-        }
-      }
-
-      if (bidderRequest?.gppConsent) {
-        payload.privacy = {
-          gpp: bidderRequest.gppConsent.gppString,
-          gpp_sid: bidderRequest.gppConsent.applicableSections
-        };
-      } else if (bidderRequest?.ortb2?.regs?.gpp) {
-        payload.privacy = {
-          gpp: bidderRequest.ortb2.regs.gpp,
-          gpp_sid: bidderRequest.ortb2.regs.gpp_sid
-        };
-      }
 
       var payloadString = JSON.stringify(payload);
 
@@ -367,6 +343,27 @@ function setDSA(bid) {
 function raiGetRegs(bidderRequest) {
   const regs = {};
 
+  if (bidderRequest?.gdprConsent) {
+    // regs.gdpr is an integer flag; omitting it means "unknown", which is
+    // not the same as declaring that GDPR does not apply.
+    if (typeof bidderRequest.gdprConsent.gdprApplies === 'boolean') {
+      deepSetValue(regs, 'gdpr', bidderRequest.gdprConsent.gdprApplies ? 1 : 0);
+    }
+  }
+
+  if (bidderRequest?.gppConsent) {
+    deepSetValue(regs, 'gpp', bidderRequest.gppConsent.gppString);
+    deepSetValue(regs, 'gpp_sid', bidderRequest.gppConsent.applicableSections);
+  } else if (bidderRequest?.ortb2?.regs?.gpp) {
+    deepSetValue(regs, 'gpp', bidderRequest.ortb2.regs.gpp);
+    deepSetValue(regs, 'gpp_sid', bidderRequest.ortb2.regs.gpp_sid);
+  }
+
+  const dsa = setDSA(bidderRequest);
+  if (dsa) {
+    deepSetValue(regs, 'ext.dsa', dsa);
+  }
+
   if (bidderRequest?.uspConsent) {
     deepSetValue(regs, 'us_privacy', bidderRequest.uspConsent);
   }
@@ -376,4 +373,16 @@ function raiGetRegs(bidderRequest) {
   }
 
   return isEmpty(regs) ? undefined : regs;
+}
+
+function raiGetUser(bidderRequest) {
+  const user = {};
+
+  if (bidderRequest?.gdprConsent) {
+    if (typeof bidderRequest.gdprConsent.consentString !== 'undefined') {
+      deepSetValue(user, 'consent', bidderRequest.gdprConsent.consentString);
+    }
+  }
+
+  return isEmpty(user) ? undefined : user;
 }

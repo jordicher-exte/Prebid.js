@@ -760,7 +760,8 @@ describe('Richaudience adapter tests', function () {
         }
       });
       const requestContent = JSON.parse(request[0].data);
-      expect(requestContent).to.have.property('gdpr_consent').and.to.equal('BOZcQl_ObPFjWAeABAESCD-AAAAjx7_______9______9uz_Ov_v_f__33e8__9v_l_7_-___u_-33d4-_1vf99yfm1-7ftr3tp_87ues2_Xur__59__3z3_NohBgA');
+      expect(requestContent.user.consent).to.equal('BOZcQl_ObPFjWAeABAESCD-AAAAjx7_______9______9uz_Ov_v_f__33e8__9v_l_7_-___u_-33d4-_1vf99yfm1-7ftr3tp_87ues2_Xur__59__3z3_NohBgA');
+      expect(requestContent.regs.gdpr).to.equal(1);
     });
 
     it('Verify adding ifa param', function () {
@@ -800,7 +801,64 @@ describe('Richaudience adapter tests', function () {
         }
       });
       const requestContent = JSON.parse(request[0].data);
-      expect(requestContent).to.have.property('gdpr_consent').and.to.equal('BOZcQl_ObPFjWAeABAESCD-AAAAjx7_______9______9uz_Ov_v_f__33e8__9v_l_7_-___u_-33d4-_1vf99yfm1-7ftr3tp_87ues2_Xur__59__3z3_NohBgA');
+      expect(requestContent.user.consent).to.equal('BOZcQl_ObPFjWAeABAESCD-AAAAjx7_______9______9uz_Ov_v_f__33e8__9v_l_7_-___u_-33d4-_1vf99yfm1-7ftr3tp_87ues2_Xur__59__3z3_NohBgA');
+      // gdprApplies is unknown here, so the flag is omitted rather than sent as 0.
+      expect(requestContent.regs).to.be.undefined;
+    });
+  });
+
+  describe('gdpr ortb placement', function () {
+    const REFERER_INFO = { page: 'https://domain.com', numIframes: 0 };
+
+    it('sends regs.gdpr as 0 when the CMP says GDPR does not apply', function () {
+      const request = spec.buildRequests(DEFAULT_PARAMS_WO_OPTIONAL, {
+        refererInfo: REFERER_INFO,
+        gdprConsent: { gdprApplies: false, consentString: 'CONSENT' }
+      });
+      const requestContent = JSON.parse(request[0].data);
+      expect(requestContent.regs.gdpr).to.equal(0);
+      expect(requestContent.user.consent).to.equal('CONSENT');
+    });
+
+    it('says nothing about GDPR when there is no CMP at all', function () {
+      const request = spec.buildRequests(DEFAULT_PARAMS_WO_OPTIONAL, { refererInfo: REFERER_INFO });
+      const requestContent = JSON.parse(request[0].data);
+      expect(requestContent).to.not.have.property('regs');
+      expect(requestContent).to.not.have.property('user');
+      // the pre-ORTB field names must be gone
+      expect(requestContent).to.not.have.property('gdpr');
+      expect(requestContent).to.not.have.property('gdpr_consent');
+    });
+  });
+
+  describe('gpp ortb placement', function () {
+    const REFERER_INFO = { page: 'https://domain.com', numIframes: 0 };
+
+    it('sends the GPP string and sections under regs', function () {
+      const request = spec.buildRequests(DEFAULT_PARAMS_WO_OPTIONAL, {
+        refererInfo: REFERER_INFO,
+        gppConsent: { gppString: 'DBABMA~1YNN', applicableSections: [7, 8] }
+      });
+      const requestContent = JSON.parse(request[0].data);
+      expect(requestContent.regs.gpp).to.equal('DBABMA~1YNN');
+      expect(requestContent.regs.gpp_sid).to.deep.equal([7, 8]);
+      expect(requestContent).to.not.have.property('privacy');
+    });
+
+    it('falls back to the GPP carried on ortb2 when there is no GPP module', function () {
+      const request = spec.buildRequests(DEFAULT_PARAMS_WO_OPTIONAL, {
+        refererInfo: REFERER_INFO,
+        ortb2: { regs: { gpp: 'DBABMA~ABC', gpp_sid: [7] } }
+      });
+      const requestContent = JSON.parse(request[0].data);
+      expect(requestContent.regs.gpp).to.equal('DBABMA~ABC');
+      expect(requestContent.regs.gpp_sid).to.deep.equal([7]);
+    });
+
+    it('omits GPP when neither source provides it', function () {
+      const request = spec.buildRequests(DEFAULT_PARAMS_WO_OPTIONAL, { refererInfo: REFERER_INFO });
+      const requestContent = JSON.parse(request[0].data);
+      expect(requestContent).to.not.have.property('regs');
     });
   });
 
@@ -1359,6 +1417,7 @@ describe('Richaudience adapter tests', function () {
 
   it('should pass DSA', function () {
     const request = spec.buildRequests(DEFAULT_PARAMS_NEW_DSA, {
+      ortb2: DEFAULT_PARAMS_NEW_DSA[0].ortb2,
       gdprConsent: {
         consentString: 'BOZcQl_ObPFjWAeABAESCD-AAAAjx7_______9______9uz_Ov_v_f__33e8__9v_l_7_-___u_-33d4-_1vf99yfm1-7ftr3tp_87ues2_Xur__59__3z3_NohBgA',
         gdprApplies: true
@@ -1366,10 +1425,18 @@ describe('Richaudience adapter tests', function () {
       refererInfo: {}
     });
     const requestContent = JSON.parse(request[0].data);
-    expect(requestContent).to.have.property('dsa').property('dsarequired').and.to.equal(2);
-    expect(requestContent).to.have.property('dsa').property('pubrender').and.to.equal(1);
-    expect(requestContent).to.have.property('dsa').property('datatopub').and.to.equal(1);
-    expect(requestContent.dsa.transparency[0]).to.have.property('domain').and.to.equal('richaudience.com');
+    expect(requestContent.regs.ext.dsa.dsarequired).to.equal(2);
+    expect(requestContent.regs.ext.dsa.pubrender).to.equal(1);
+    expect(requestContent.regs.ext.dsa.datatopub).to.equal(1);
+    expect(requestContent.regs.ext.dsa.transparency[0].domain).to.equal('richaudience.com');
+    expect(requestContent).to.not.have.property('dsa');
+  });
+
+  it('omits the DSA object entirely when the publisher declares none', function () {
+    const request = spec.buildRequests(DEFAULT_PARAMS_WO_OPTIONAL, { refererInfo: {} });
+    const requestContent = JSON.parse(request[0].data);
+    expect(requestContent).to.not.have.property('dsa');
+    expect(requestContent).to.not.have.property('regs');
   });
 
   it('should pass gpid with gpid', function () {
